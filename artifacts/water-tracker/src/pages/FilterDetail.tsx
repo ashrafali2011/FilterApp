@@ -18,6 +18,7 @@ import {
   useReplaceAllCartridges, useReplaceCartridge,
   useGetFilterHistory, getGetFilterHistoryQueryKey,
   useListBanners, getListBannersQueryKey,
+  getListFiltersQueryKey, getGetFiltersSummaryQueryKey, getGetUpcomingReplacementsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -84,7 +85,13 @@ export default function FilterDetail() {
   const handleDelete = () => {
     if (isAuthenticated) {
       deleteFilterMutation.mutate({ filterId: id }, {
-        onSuccess: () => { setLocation("/"); toast({ title: t("Filter deleted", "تم حذف الفلتر") }); },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListFiltersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetFiltersSummaryQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetUpcomingReplacementsQueryKey() });
+          toast({ title: t("Filter deleted", "تم حذف الفلتر") });
+          setLocation("/");
+        },
         onError: () => toast({ title: t("Failed to delete", "فشل الحذف"), variant: "destructive" }),
       });
     } else {
