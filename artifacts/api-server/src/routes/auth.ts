@@ -1,8 +1,74 @@
 import { Router } from "express";
-import { db, usersTable, settingsTable } from "@workspace/db";
+import { db, usersTable, settingsTable, filtersTable, cartridgesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
+
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().split("T")[0];
+}
+
+function daysFromNow(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split("T")[0];
+}
+
+export async function seedExampleFilters(userId: number) {
+  const examples = [
+    {
+      filter: {
+        name: "Kitchen RO System",
+        location: "Kitchen",
+        templateType: "5stage",
+        notes: "Example filter — overdue for replacement",
+        status: "overdue",
+      },
+      cartridges: [
+        { name: "Sediment Filter", stageNumber: 1, intervalDays: 180, lastReplacedDate: daysAgo(210), nextReplacementDate: daysFromNow(-30), status: "overdue" },
+        { name: "Carbon Block", stageNumber: 2, intervalDays: 180, lastReplacedDate: daysAgo(195), nextReplacementDate: daysFromNow(-15), status: "overdue" },
+        { name: "RO Membrane", stageNumber: 3, intervalDays: 365, lastReplacedDate: daysAgo(400), nextReplacementDate: daysFromNow(-35), status: "overdue" },
+        { name: "Post Carbon", stageNumber: 4, intervalDays: 365, lastReplacedDate: daysAgo(380), nextReplacementDate: daysFromNow(-15), status: "overdue" },
+        { name: "Alkaline Filter", stageNumber: 5, intervalDays: 180, lastReplacedDate: daysAgo(200), nextReplacementDate: daysFromNow(-20), status: "overdue" },
+      ],
+    },
+    {
+      filter: {
+        name: "Office Water Cooler",
+        location: "Office",
+        templateType: "3stage",
+        notes: "Example filter — replacement due soon",
+        status: "warning",
+      },
+      cartridges: [
+        { name: "PP Sediment", stageNumber: 1, intervalDays: 90, lastReplacedDate: daysAgo(83), nextReplacementDate: daysFromNow(7), status: "warning" },
+        { name: "Activated Carbon", stageNumber: 2, intervalDays: 90, lastReplacedDate: daysAgo(82), nextReplacementDate: daysFromNow(8), status: "warning" },
+        { name: "UF Membrane", stageNumber: 3, intervalDays: 180, lastReplacedDate: daysAgo(80), nextReplacementDate: daysFromNow(100), status: "healthy" },
+      ],
+    },
+    {
+      filter: {
+        name: "Bathroom Tap Filter",
+        location: "Bathroom",
+        templateType: "1stage",
+        notes: "Example filter — all cartridges healthy",
+        status: "healthy",
+      },
+      cartridges: [
+        { name: "Ceramic Filter", stageNumber: 1, intervalDays: 365, lastReplacedDate: daysAgo(30), nextReplacementDate: daysFromNow(335), status: "healthy" },
+      ],
+    },
+  ];
+
+  for (const { filter, cartridges } of examples) {
+    const [f] = await db.insert(filtersTable).values({ ...filter, userId }).returning();
+    for (const c of cartridges) {
+      await db.insert(cartridgesTable).values({ ...c, filterId: f.id });
+    }
+  }
+}
 
 export async function seedAdminUser() {
   const existing = await db.select().from(usersTable).where(eq(usersTable.username, "Admin")).limit(1);
@@ -80,6 +146,8 @@ router.post("/register", async (req, res) => {
     theme: "system",
     themeColor: "#0ea5e9",
   }).onConflictDoNothing();
+
+  await seedExampleFilters(user.id).catch(() => {});
 
   const token = makeToken(user.id);
   res.status(201).json({
