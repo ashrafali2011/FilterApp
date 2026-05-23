@@ -257,15 +257,17 @@ export default function Settings() {
         </div>
       </Section>
 
-      {/* Admin */}
-      <Section title={t("Advanced", "متقدم")}>
-        <Link href="/admin">
-          <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-admin-panel">
-            <Shield className="w-3.5 h-3.5" />
-            {t("Admin Panel", "لوحة الإدارة")}
-          </Button>
-        </Link>
-      </Section>
+      {/* Admin — only visible to the Admin user */}
+      {user?.username === "Admin" && (
+        <Section title={t("Advanced", "متقدم")}>
+          <Link href="/admin">
+            <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-admin-panel">
+              <Shield className="w-3.5 h-3.5" />
+              {t("Admin Panel", "لوحة الإدارة")}
+            </Button>
+          </Link>
+        </Section>
+      )}
 
       <Button className="w-full" onClick={saveSettings} disabled={updateSettingsMutation.isPending} data-testid="button-save-settings">
         {updateSettingsMutation.isPending ? t("Saving...", "جاري الحفظ...") : t("Save Settings", "حفظ الإعدادات")}
