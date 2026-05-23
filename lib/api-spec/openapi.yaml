@@ -1,22 +1,32 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Water Filter Maintenance Tracker API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: filters
+    description: Water filter management
+  - name: cartridges
+    description: Cartridge management
+  - name: history
+    description: Replacement history
+  - name: banners
+    description: Banner management
+  - name: settings
+    description: User settings
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +34,522 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Unauthorized
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: OK
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+
+  /filters:
+    get:
+      operationId: listFilters
+      tags: [filters]
+      summary: List all filters
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Filter"
+    post:
+      operationId: createFilter
+      tags: [filters]
+      summary: Create a filter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FilterInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Filter"
+
+  /filters/summary:
+    get:
+      operationId: getFiltersSummary
+      tags: [filters]
+      summary: Get filter health summary stats
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiltersSummary"
+
+  /filters/upcoming:
+    get:
+      operationId: getUpcomingReplacements
+      tags: [filters]
+      summary: Get cartridges due for replacement soon
+      parameters:
+        - name: withinDays
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UpcomingReplacement"
+
+  /filters/{filterId}:
+    get:
+      operationId: getFilter
+      tags: [filters]
+      summary: Get a filter
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Filter"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateFilter
+      tags: [filters]
+      summary: Update a filter
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FilterUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Filter"
+    delete:
+      operationId: deleteFilter
+      tags: [filters]
+      summary: Delete a filter
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: No content
+
+  /filters/{filterId}/cartridges:
+    get:
+      operationId: listCartridges
+      tags: [cartridges]
+      summary: List cartridges for a filter
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cartridge"
+    post:
+      operationId: createCartridge
+      tags: [cartridges]
+      summary: Add a cartridge to a filter
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CartridgeInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cartridge"
+
+  /filters/{filterId}/cartridges/{cartridgeId}:
+    patch:
+      operationId: updateCartridge
+      tags: [cartridges]
+      summary: Update a cartridge
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: cartridgeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CartridgeUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cartridge"
+    delete:
+      operationId: deleteCartridge
+      tags: [cartridges]
+      summary: Delete a cartridge
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: cartridgeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: No content
+
+  /filters/{filterId}/cartridges/{cartridgeId}/replace:
+    post:
+      operationId: replaceCartridge
+      tags: [cartridges]
+      summary: Mark a cartridge as replaced
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: cartridgeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cartridge"
+
+  /filters/{filterId}/replace-all:
+    post:
+      operationId: replaceAllCartridges
+      tags: [cartridges]
+      summary: Replace all cartridges in a filter at once
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cartridge"
+
+  /filters/{filterId}/history:
+    get:
+      operationId: getFilterHistory
+      tags: [history]
+      summary: Get replacement history for a filter
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReplacementRecord"
+
+  /history:
+    get:
+      operationId: listHistory
+      tags: [history]
+      summary: Get all replacement history
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReplacementRecord"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get user settings
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update user settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  /banners:
+    get:
+      operationId: listBanners
+      tags: [banners]
+      summary: List enabled banners (public)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Banner"
+
+  /admin/verify-pin:
+    post:
+      operationId: verifyAdminPin
+      tags: [banners]
+      summary: Verify admin PIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminPinInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminTokenResponse"
+        "401":
+          description: Unauthorized
+
+  /admin/banners:
+    get:
+      operationId: listAdminBanners
+      tags: [banners]
+      summary: List all banners (admin)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Banner"
+    post:
+      operationId: createBanner
+      tags: [banners]
+      summary: Create a banner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BannerInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+
+  /admin/banners/{bannerId}:
+    patch:
+      operationId: updateBanner
+      tags: [banners]
+      summary: Update a banner
+      parameters:
+        - name: bannerId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BannerUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+    delete:
+      operationId: deleteBanner
+      tags: [banners]
+      summary: Delete a banner
+      parameters:
+        - name: bannerId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: No content
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +560,317 @@ components:
       required:
         - status
 
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        createdAt:
+          type: string
+      required: [id, username, createdAt]
+
+    AuthInput:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          minLength: 6
+      required: [username, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+      required: [user, token]
+
+    Filter:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        name:
+          type: string
+        location:
+          type: ["string", "null"]
+        templateType:
+          type: string
+          enum: [single, three_stage, five_stage, seven_stage, custom]
+        installationDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [healthy, warning, overdue]
+        cartridges:
+          type: array
+          items:
+            $ref: "#/components/schemas/Cartridge"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, name, templateType, status, createdAt, updatedAt]
+
+    FilterInput:
+      type: object
+      properties:
+        userId:
+          type: ["integer", "null"]
+        name:
+          type: string
+          minLength: 1
+        location:
+          type: ["string", "null"]
+        templateType:
+          type: string
+          enum: [single, three_stage, five_stage, seven_stage, custom]
+        installationDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [name, templateType]
+
+    FilterUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        location:
+          type: ["string", "null"]
+        installationDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    FiltersSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        healthy:
+          type: integer
+        warning:
+          type: integer
+        overdue:
+          type: integer
+        totalCartridges:
+          type: integer
+        overdueCartridges:
+          type: integer
+      required: [total, healthy, warning, overdue, totalCartridges, overdueCartridges]
+
+    UpcomingReplacement:
+      type: object
+      properties:
+        filterId:
+          type: integer
+        filterName:
+          type: string
+        cartridgeId:
+          type: integer
+        cartridgeName:
+          type: string
+        stageNumber:
+          type: integer
+        nextReplacementDate:
+          type: string
+        daysRemaining:
+          type: integer
+        status:
+          type: string
+          enum: [healthy, warning, overdue]
+      required: [filterId, filterName, cartridgeId, cartridgeName, stageNumber, nextReplacementDate, daysRemaining, status]
+
+    Cartridge:
+      type: object
+      properties:
+        id:
+          type: integer
+        filterId:
+          type: integer
+        name:
+          type: string
+        stageNumber:
+          type: integer
+        lastReplacedDate:
+          type: ["string", "null"]
+        intervalDays:
+          type: integer
+        nextReplacementDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [healthy, warning, overdue]
+        daysRemaining:
+          type: ["integer", "null"]
+      required: [id, filterId, name, stageNumber, intervalDays, status]
+
+    CartridgeInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        stageNumber:
+          type: integer
+          minimum: 1
+        lastReplacedDate:
+          type: ["string", "null"]
+        intervalDays:
+          type: integer
+          minimum: 1
+      required: [name, stageNumber, intervalDays]
+
+    CartridgeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        stageNumber:
+          type: integer
+        lastReplacedDate:
+          type: ["string", "null"]
+        intervalDays:
+          type: integer
+
+    ReplaceInput:
+      type: object
+      properties:
+        replacedAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    ReplacementRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        filterId:
+          type: integer
+        filterName:
+          type: string
+        cartridgeId:
+          type: integer
+        cartridgeName:
+          type: string
+        stageNumber:
+          type: integer
+        replacedAt:
+          type: string
+        notes:
+          type: ["string", "null"]
+      required: [id, filterId, filterName, cartridgeId, cartridgeName, stageNumber, replacedAt]
+
+    Settings:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        reminderDays:
+          type: array
+          items:
+            type: integer
+        notificationsEnabled:
+          type: boolean
+        language:
+          type: string
+          enum: [en, ar]
+        theme:
+          type: string
+          enum: [light, dark, system]
+        themeColor:
+          type: string
+      required: [id, reminderDays, notificationsEnabled, language, theme, themeColor]
+
+    SettingsUpdate:
+      type: object
+      properties:
+        reminderDays:
+          type: array
+          items:
+            type: integer
+        notificationsEnabled:
+          type: boolean
+        language:
+          type: string
+          enum: [en, ar]
+        theme:
+          type: string
+          enum: [light, dark, system]
+        themeColor:
+          type: string
+
+    Banner:
+      type: object
+      properties:
+        id:
+          type: integer
+        position:
+          type: string
+          enum: [home_top, home_bottom, filter_detail]
+        imageUrl:
+          type: string
+        clickUrl:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, position, imageUrl, enabled, createdAt]
+
+    BannerInput:
+      type: object
+      properties:
+        position:
+          type: string
+          enum: [home_top, home_bottom, filter_detail]
+        imageUrl:
+          type: string
+        clickUrl:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+      required: [position, imageUrl, enabled]
+
+    BannerUpdate:
+      type: object
+      properties:
+        position:
+          type: string
+          enum: [home_top, home_bottom, filter_detail]
+        imageUrl:
+          type: string
+        clickUrl:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+
+    AdminPinInput:
+      type: object
+      properties:
+        pin:
+          type: string
+      required: [pin]
+
+    AdminTokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        valid:
+          type: boolean
+      required: [token, valid]
