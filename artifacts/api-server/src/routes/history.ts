@@ -18,7 +18,7 @@ function formatRecord(r: any) {
   };
 }
 
-router.get("/filter/:filterId/history", async (req, res) => {
+router.get("/:filterId/history", async (req, res) => {
   const filterId = parseInt(req.params.filterId, 10);
   if (isNaN(filterId)) { res.status(400).json({ error: "Invalid id" }); return; }
 

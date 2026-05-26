@@ -11,6 +11,7 @@ import {
   useGetFiltersSummary, getGetFiltersSummaryQueryKey,
   useGetUpcomingReplacements, getGetUpcomingReplacementsQueryKey,
   useListBanners, getListBannersQueryKey,
+  useGetSettings, getGetSettingsQueryKey,
 } from "@workspace/api-client-react";
 import {
   guestGetFilters, guestGetSummary, guestGetUpcoming
@@ -27,14 +28,23 @@ export default function Dashboard() {
   const isCloud = isAuthenticated;
   const useGuest = isGuest && !isAuthenticated;
 
+  const { data: settings } = useGetSettings({
+    query: { enabled: isCloud, queryKey: getGetSettingsQueryKey() }
+  });
+
+  // Use the largest reminder day as the look-ahead window (default 30)
+  const withinDays = settings?.reminderDays?.length
+    ? Math.max(...settings.reminderDays)
+    : 30;
+
   const { data: apiFilters, isLoading: filtersLoading } = useListFilters({}, {
     query: { enabled: isCloud, queryKey: getListFiltersQueryKey({}) }
   });
   const { data: apiSummary, isLoading: summaryLoading } = useGetFiltersSummary({
     query: { enabled: isCloud, queryKey: getGetFiltersSummaryQueryKey() }
   });
-  const { data: apiUpcoming } = useGetUpcomingReplacements({}, {
-    query: { enabled: isCloud, queryKey: getGetUpcomingReplacementsQueryKey({}) }
+  const { data: apiUpcoming } = useGetUpcomingReplacements({ withinDays }, {
+    query: { enabled: isCloud, queryKey: getGetUpcomingReplacementsQueryKey({ withinDays }) }
   });
   const { data: banners } = useListBanners({
     query: { queryKey: getListBannersQueryKey() }
@@ -151,6 +161,9 @@ export default function Dashboard() {
           <h2 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
             <Clock className="w-4 h-4 text-amber-500" />
             {t("Upcoming Replacements", "الاستبدالات القادمة")}
+            <span className="text-xs font-normal text-muted-foreground ms-auto">
+              {t(`within ${withinDays}d`, `خلال ${withinDays} يوم`)}
+            </span>
           </h2>
           <div className="space-y-2">
             {upcoming.slice(0, 5).map((item: any) => (
