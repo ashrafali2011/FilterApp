@@ -22,7 +22,7 @@ function formatCartridge(c: any) {
 }
 
 router.post("/", async (req, res) => {
-  const filterId = parseInt(req.params.filterId, 10);
+  const filterId = parseInt(String((req.params as any).filterId), 10);
   if (isNaN(filterId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const parsed = ReplaceAllCartridgesBody.safeParse(req.body ?? {});

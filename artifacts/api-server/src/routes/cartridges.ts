@@ -29,7 +29,7 @@ async function refreshFilterStatus(filterId: number) {
 }
 
 router.get("/", async (req, res) => {
-  const filterId = parseInt(req.params.filterId, 10);
+  const filterId = parseInt(String((req.params as any).filterId), 10);
   if (isNaN(filterId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const cartridges = await db.select().from(cartridgesTable).where(eq(cartridgesTable.filterId, filterId));
@@ -37,7 +37,7 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const filterId = parseInt(req.params.filterId, 10);
+  const filterId = parseInt(String((req.params as any).filterId), 10);
   if (isNaN(filterId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const parsed = CreateCartridgeBody.safeParse(req.body);
@@ -61,8 +61,8 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/:cartridgeId", async (req, res) => {
-  const filterId = parseInt(req.params.filterId, 10);
-  const cartridgeId = parseInt(req.params.cartridgeId, 10);
+  const filterId = parseInt(String((req.params as any).filterId), 10);
+  const cartridgeId = parseInt(String(req.params.cartridgeId), 10);
   if (isNaN(filterId) || isNaN(cartridgeId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const parsed = UpdateCartridgeBody.safeParse(req.body);
@@ -91,8 +91,8 @@ router.patch("/:cartridgeId", async (req, res) => {
 });
 
 router.delete("/:cartridgeId", async (req, res) => {
-  const filterId = parseInt(req.params.filterId, 10);
-  const cartridgeId = parseInt(req.params.cartridgeId, 10);
+  const filterId = parseInt(String((req.params as any).filterId), 10);
+  const cartridgeId = parseInt(String(req.params.cartridgeId), 10);
   if (isNaN(filterId) || isNaN(cartridgeId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   await db.delete(cartridgesTable)
@@ -102,8 +102,8 @@ router.delete("/:cartridgeId", async (req, res) => {
 });
 
 router.post("/:cartridgeId/replace", async (req, res) => {
-  const filterId = parseInt(req.params.filterId, 10);
-  const cartridgeId = parseInt(req.params.cartridgeId, 10);
+  const filterId = parseInt(String((req.params as any).filterId), 10);
+  const cartridgeId = parseInt(String(req.params.cartridgeId), 10);
   if (isNaN(filterId) || isNaN(cartridgeId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const parsed = ReplaceCartridgeBody.safeParse(req.body ?? {});

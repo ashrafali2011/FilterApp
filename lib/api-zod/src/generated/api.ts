@@ -27,6 +27,7 @@ export const registerBodyPasswordMin = 6;
 
 export const RegisterBody = zod.object({
   "username": zod.string().min(registerBodyUsernameMin),
+  "email": zod.string().email(),
   "password": zod.string().min(registerBodyPasswordMin)
 })
 
@@ -52,6 +53,39 @@ export const LoginResponse = zod.object({
   "createdAt": zod.string()
 }),
   "token": zod.string()
+})
+
+
+/**
+ * @summary Request a password reset OTP by email
+ */
+export const ForgotPasswordBody = zod.object({
+  "email": zod.string().email()
+})
+
+export const ForgotPasswordResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Reset password using OTP
+ */
+export const resetPasswordBodyOtpMin = 6;
+export const resetPasswordBodyOtpMax = 6;
+
+export const resetPasswordBodyNewPasswordMin = 6;
+
+
+
+export const ResetPasswordBody = zod.object({
+  "email": zod.string().email(),
+  "otp": zod.string().min(resetPasswordBodyOtpMin).max(resetPasswordBodyOtpMax),
+  "newPassword": zod.string().min(resetPasswordBodyNewPasswordMin)
+})
+
+export const ResetPasswordResponse = zod.object({
+  "message": zod.string()
 })
 
 

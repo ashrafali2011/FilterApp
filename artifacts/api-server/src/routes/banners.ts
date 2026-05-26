@@ -53,7 +53,7 @@ router.post("/admin/banners", requireAdmin, async (req, res) => {
 });
 
 router.patch("/admin/banners/:bannerId", requireAdmin, async (req, res) => {
-  const bannerId = parseInt(req.params.bannerId, 10);
+  const bannerId = parseInt(String(req.params.bannerId), 10);
   if (isNaN(bannerId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const parsed = UpdateBannerBody.safeParse(req.body);
@@ -65,7 +65,7 @@ router.patch("/admin/banners/:bannerId", requireAdmin, async (req, res) => {
 });
 
 router.delete("/admin/banners/:bannerId", requireAdmin, async (req, res) => {
-  const bannerId = parseInt(req.params.bannerId, 10);
+  const bannerId = parseInt(String(req.params.bannerId), 10);
   if (isNaN(bannerId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   await db.delete(bannersTable).where(eq(bannersTable.id, bannerId));

@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { db, usersTable, settingsTable, filtersTable, cartridgesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { createHash } from "crypto";
-import { RegisterBody, LoginBody } from "@workspace/api-zod";
+import { db, usersTable, settingsTable, filtersTable, cartridgesTable, passwordResetOtpsTable } from "@workspace/db";
+import { eq, and, gt, isNull } from "drizzle-orm";
+import { createHash, randomInt } from "crypto";
+import { RegisterBody, LoginBody, ForgotPasswordBody, ResetPasswordBody } from "@workspace/api-zod";
+import { sendOtpEmail } from "../lib/email";
+import { logger } from "../lib/logger";
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -91,7 +93,11 @@ export async function seedAdminUser() {
 const router = Router();
 
 function hashPassword(password: string): string {
-  return createHash("sha256").update(password + process.env.SESSION_SECRET ?? "salt").digest("hex");
+  return createHash("sha256").update(password + (process.env.SESSION_SECRET ?? "salt")).digest("hex");
+}
+
+function hashOtp(otp: string): string {
+  return createHash("sha256").update(otp + (process.env.SESSION_SECRET ?? "salt")).digest("hex");
 }
 
 function makeToken(userId: number): string {
@@ -114,27 +120,36 @@ function getUserIdFromToken(token: string): number | null {
 
 export { getUserIdFromToken };
 
+// ─── Register ─────────────────────────────────────────────────────────────────
+
 router.post("/register", async (req, res) => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });
     return;
   }
-  const { username, password } = parsed.data;
+  const { username, email, password } = parsed.data;
 
   if (username.toLowerCase() === "admin") {
     res.status(400).json({ error: "Username not allowed" });
     return;
   }
 
-  const existing = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
-  if (existing.length > 0) {
+  const existingByUsername = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
+  if (existingByUsername.length > 0) {
     res.status(400).json({ error: "Username already taken" });
+    return;
+  }
+
+  const existingByEmail = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (existingByEmail.length > 0) {
+    res.status(400).json({ error: "Email already registered" });
     return;
   }
 
   const [user] = await db.insert(usersTable).values({
     username,
+    email,
     passwordHash: hashPassword(password),
   }).returning();
 
@@ -156,6 +171,8 @@ router.post("/register", async (req, res) => {
   });
 });
 
+// ─── Login ────────────────────────────────────────────────────────────────────
+
 router.post("/login", async (req, res) => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
@@ -176,6 +193,90 @@ router.post("/login", async (req, res) => {
     token,
   });
 });
+
+// ─── Forgot password (send OTP) ───────────────────────────────────────────────
+
+router.post("/forgot-password", async (req, res) => {
+  const parsed = ForgotPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input" });
+    return;
+  }
+  const { email } = parsed.data;
+
+  // Always respond 200 to avoid leaking which emails are registered
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (!user) {
+    res.json({ message: "If that email is registered, an OTP has been sent." });
+    return;
+  }
+
+  // Invalidate old OTPs for this user
+  await db.delete(passwordResetOtpsTable).where(
+    and(eq(passwordResetOtpsTable.userId, user.id), isNull(passwordResetOtpsTable.usedAt))
+  );
+
+  // Generate 6-digit OTP
+  const otp = String(randomInt(100000, 999999));
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await db.insert(passwordResetOtpsTable).values({
+    userId: user.id,
+    otpHash: hashOtp(otp),
+    expiresAt,
+  });
+
+  await sendOtpEmail(email, otp, user.username).catch(err => {
+    logger.error({ err }, "Failed to send OTP email");
+  });
+
+  res.json({ message: "If that email is registered, an OTP has been sent." });
+});
+
+// ─── Reset password (verify OTP + set new password) ──────────────────────────
+
+router.post("/reset-password", async (req, res) => {
+  const parsed = ResetPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input" });
+    return;
+  }
+  const { email, otp, newPassword } = parsed.data;
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (!user) {
+    res.status(400).json({ error: "Invalid or expired OTP" });
+    return;
+  }
+
+  const now = new Date();
+  const [record] = await db.select().from(passwordResetOtpsTable).where(
+    and(
+      eq(passwordResetOtpsTable.userId, user.id),
+      eq(passwordResetOtpsTable.otpHash, hashOtp(otp)),
+      isNull(passwordResetOtpsTable.usedAt),
+      gt(passwordResetOtpsTable.expiresAt, now)
+    )
+  ).limit(1);
+
+  if (!record) {
+    res.status(400).json({ error: "Invalid or expired OTP" });
+    return;
+  }
+
+  // Mark OTP as used + update password
+  await db.update(passwordResetOtpsTable)
+    .set({ usedAt: now })
+    .where(eq(passwordResetOtpsTable.id, record.id));
+
+  await db.update(usersTable)
+    .set({ passwordHash: hashPassword(newPassword) })
+    .where(eq(usersTable.id, user.id));
+
+  res.json({ message: "Password reset successfully." });
+});
+
+// ─── Logout / Me ──────────────────────────────────────────────────────────────
 
 router.post("/logout", (_req, res) => {
   res.json({ ok: true });

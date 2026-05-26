@@ -15,11 +15,38 @@ export interface User {
   createdAt: string;
 }
 
+export interface RegisterInput {
+  /** @minLength 3 */
+  username: string;
+  email: string;
+  /** @minLength 6 */
+  password: string;
+}
+
 export interface AuthInput {
   /** @minLength 3 */
   username: string;
   /** @minLength 6 */
   password: string;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  email: string;
+  /**
+     * @minLength 6
+     * @maxLength 6
+     */
+  otp: string;
+  /** @minLength 6 */
+  newPassword: string;
+}
+
+export interface MessageResponse {
+  message: string;
 }
 
 export interface AuthResponse {
