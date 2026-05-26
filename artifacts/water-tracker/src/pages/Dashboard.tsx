@@ -19,7 +19,7 @@ import {
 import { Plus, Droplets, AlertTriangle, CheckCircle, Clock, ExternalLink } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useMemo } from "react";
-import { useNotifications } from "@/hooks/use-notifications";
+import { useNotifications, getTestMode } from "@/hooks/use-notifications";
 
 export default function Dashboard() {
   const { isAuthenticated, isGuest, isLoading: authLoading } = useAuth();
@@ -60,8 +60,9 @@ export default function Dashboard() {
   // Fire notification + sound when reminders are due
   useNotifications({
     enabled: settings?.notificationsEnabled ?? false,
-    reminderDays: settings?.reminderDays ?? [],
+    reminderThresholds: settings?.reminderDays ?? [],
     upcoming: upcoming as any[],
+    testMode: getTestMode(),
   });
 
   const filters = isCloud ? (apiFilters ?? []) : guestFilters;

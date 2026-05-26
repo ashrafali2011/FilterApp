@@ -20,6 +20,9 @@ import {
   getNotificationPermission,
   playNotificationChime,
   playOverdueAlarm,
+  clearNotifiedCache,
+  getTestMode,
+  setTestMode,
 } from "@/hooks/use-notifications";
 
 export default function Settings() {
@@ -34,6 +37,7 @@ export default function Settings() {
   const [reminderDays, setReminderDays] = useState([7, 10, 20]);
   const [customDay, setCustomDay] = useState("");
   const [permission, setPermission] = useState<NotificationPermission>(() => getNotificationPermission());
+  const [testMode, setTestModeState] = useState(() => getTestMode());
 
   const { data: settings } = useGetSettings({
     query: { enabled: isAuthenticated, queryKey: getGetSettingsQueryKey() }
@@ -283,9 +287,51 @@ export default function Settings() {
                 </div>
               )}
 
-              {/* Reminder days config */}
+              {/* Test mode toggle */}
+              <div className={cn(
+                "flex items-center justify-between rounded-lg border px-3 py-2.5",
+                testMode
+                  ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20"
+                  : "border-border"
+              )}>
+                <div>
+                  <Label className={cn("font-medium text-sm", testMode && "text-amber-700 dark:text-amber-400")}>
+                    {t("Test Mode (minutes)", "وضع الاختبار (دقائق)")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {testMode
+                      ? t("Thresholds are in minutes — checks run every 30 s", "العتبات بالدقائق — يتحقق كل 30 ثانية")
+                      : t("Switch to minutes so you can test notifications quickly", "استخدم الدقائق لاختبار الإشعارات بسرعة")}
+                  </p>
+                </div>
+                <Switch
+                  checked={testMode}
+                  onCheckedChange={val => {
+                    setTestModeState(val);
+                    setTestMode(val);
+                    clearNotifiedCache();
+                    toast({
+                      title: val
+                        ? t("Test mode on — thresholds are now in minutes", "وضع الاختبار مفعّل — العتبات الآن بالدقائق")
+                        : t("Test mode off — back to days", "وضع الاختبار مُغلق — عدنا للأيام"),
+                    });
+                  }}
+                  data-testid="switch-test-mode"
+                />
+              </div>
+
+              {/* Reminder thresholds */}
               <div>
-                <Label className="text-sm">{t("Remind me before (days)", "تذكيرني قبل (أيام)")}</Label>
+                <Label className="text-sm">
+                  {testMode
+                    ? t("Remind me before (minutes)", "تذكيرني قبل (دقائق)")
+                    : t("Remind me before (days)", "تذكيرني قبل (أيام)")}
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {testMode
+                    ? t("e.g. add 2 for a filter due in 2 minutes", "مثال: أضف 2 لتصفية موعدها بعد دقيقتين")
+                    : t("Click a value to remove it", "انقر على قيمة لإزالتها")}
+                </p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {reminderDays.map(day => (
                     <button
@@ -295,7 +341,7 @@ export default function Settings() {
                       title={t("Click to remove", "انقر للإزالة")}
                       data-testid={`reminder-day-${day}`}
                     >
-                      {day}d ×
+                      {day}{testMode ? "m" : "d"} ×
                     </button>
                   ))}
                 </div>
@@ -304,8 +350,8 @@ export default function Settings() {
                     type="number"
                     value={customDay}
                     onChange={e => setCustomDay(e.target.value)}
-                    placeholder={t("Add days...", "أضف أيام...")}
-                    className="h-8 text-sm w-32"
+                    placeholder={testMode ? t("Add minutes...", "أضف دقائق...") : t("Add days...", "أضف أيام...")}
+                    className="h-8 text-sm w-36"
                     onKeyDown={e => e.key === "Enter" && addReminderDay()}
                     data-testid="input-custom-reminder-day"
                   />

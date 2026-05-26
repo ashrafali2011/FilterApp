@@ -5,8 +5,7 @@ import { useEffect, useRef, useCallback } from "react";
 export function playNotificationChime() {
   try {
     const ctx = new AudioContext();
-    // Pleasant ascending C-E-G chime
-    const notes = [523.25, 659.25, 783.99];
+    const notes = [523.25, 659.25, 783.99]; // C5-E5-G5 ascending
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -21,18 +20,14 @@ export function playNotificationChime() {
       osc.start(t);
       osc.stop(t + 0.5);
     });
-    // Close context after chime finishes
     setTimeout(() => ctx.close(), 1200);
-  } catch {
-    // AudioContext may be blocked — silently ignore
-  }
+  } catch {}
 }
 
 export function playOverdueAlarm() {
   try {
     const ctx = new AudioContext();
-    // Two-note descending alarm: G-E
-    const notes = [783.99, 659.25, 523.25];
+    const notes = [783.99, 659.25, 523.25]; // G5-E5-C5 descending
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -51,7 +46,21 @@ export function playOverdueAlarm() {
   } catch {}
 }
 
-// ─── Notification helpers ─────────────────────────────────────────────────────
+// ─── Notification permission ──────────────────────────────────────────────────
+
+export function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (!("Notification" in window)) return Promise.resolve("denied");
+  if (Notification.permission === "granted") return Promise.resolve("granted");
+  if (Notification.permission === "denied") return Promise.resolve("denied");
+  return Notification.requestPermission();
+}
+
+export function getNotificationPermission(): NotificationPermission {
+  if (!("Notification" in window)) return "denied";
+  return Notification.permission;
+}
+
+// ─── Notified-set helpers ─────────────────────────────────────────────────────
 
 const NOTIFIED_KEY = "aquatrack_notified";
 
@@ -67,7 +76,6 @@ function getNotifiedSet(): Set<string> {
 function markNotified(key: string) {
   const set = getNotifiedSet();
   set.add(key);
-  // Prune old entries — keep at most 500
   const arr = Array.from(set).slice(-500);
   localStorage.setItem(NOTIFIED_KEY, JSON.stringify(arr));
 }
@@ -76,31 +84,25 @@ function wasNotified(key: string): boolean {
   return getNotifiedSet().has(key);
 }
 
-function today(): string {
+/** Call this when toggling test-mode on so notifications re-fire immediately. */
+export function clearNotifiedCache() {
+  localStorage.removeItem(NOTIFIED_KEY);
+}
+
+function todayStamp(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-export function requestNotificationPermission(): Promise<NotificationPermission> {
-  if (!("Notification" in window)) return Promise.resolve("denied");
-  if (Notification.permission === "granted") return Promise.resolve("granted");
-  if (Notification.permission === "denied") return Promise.resolve("denied");
-  return Notification.requestPermission();
-}
-
-export function getNotificationPermission(): NotificationPermission {
-  if (!("Notification" in window)) return "denied";
-  return Notification.permission;
+/** Current minute slot — used for per-minute dedup in test mode */
+function currentMinuteSlot(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}-${d.getMinutes()}`;
 }
 
 function showBrowserNotification(title: string, body: string, tag: string) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   try {
-    new Notification(title, {
-      body,
-      tag,
-      icon: "/favicon.ico",
-      badge: "/favicon.ico",
-    });
+    new Notification(title, { body, tag, icon: "/favicon.ico" });
   } catch {}
 }
 
@@ -116,76 +118,104 @@ interface UpcomingItem {
 
 interface UseNotificationsOptions {
   enabled: boolean;
-  reminderDays: number[];
+  /** Thresholds in days (normal) or minutes (testMode) */
+  reminderThresholds: number[];
   upcoming: UpcomingItem[];
+  /** When true, thresholds are treated as minutes, checks run every 30 s */
+  testMode: boolean;
 }
 
-export function useNotifications({ enabled, reminderDays, upcoming }: UseNotificationsOptions) {
+export function useNotifications({
+  enabled,
+  reminderThresholds,
+  upcoming,
+  testMode,
+}: UseNotificationsOptions) {
   const checkedRef = useRef(false);
 
   const checkAndNotify = useCallback(() => {
     if (!enabled || upcoming.length === 0) return;
 
-    const sortedReminders = [...reminderDays].sort((a, b) => a - b);
+    const sorted = [...reminderThresholds].sort((a, b) => a - b);
+    // tolerance: ±1 day in normal mode, ±2 minutes in test mode
+    const tolerance = testMode ? 2 : 1;
 
     for (const item of upcoming) {
       const { cartridgeId, cartridgeName, filterName, daysRemaining, status } = item;
 
+      // Convert to the active unit
+      const valueRemaining = testMode ? daysRemaining * 1440 : daysRemaining;
+      const unit = testMode ? "min" : "day";
+
       if (status === "overdue") {
-        // Notify once per day for overdue items
-        const key = `overdue_${cartridgeId}_${today()}`;
+        const slot = testMode ? currentMinuteSlot() : todayStamp();
+        const key = `overdue_${cartridgeId}_${slot}`;
         if (!wasNotified(key)) {
           markNotified(key);
           playOverdueAlarm();
+          const absVal = Math.abs(valueRemaining);
           showBrowserNotification(
             "⚠️ Overdue Replacement",
-            `${filterName} › ${cartridgeName} is overdue by ${Math.abs(daysRemaining)} day${Math.abs(daysRemaining) !== 1 ? "s" : ""}`,
+            `${filterName} › ${cartridgeName} is overdue by ${Math.round(absVal)} ${unit}${Math.round(absVal) !== 1 ? "s" : ""}`,
             key
           );
-          // Only fire alarm once per batch to avoid noise
           break;
         }
       } else {
-        // Check if daysRemaining matches any reminder threshold (±1 day tolerance)
-        const matchedDay = sortedReminders.find(
-          d => Math.abs(daysRemaining - d) <= 1
+        const matchedThreshold = sorted.find(
+          t => Math.abs(valueRemaining - t) <= tolerance
         );
-        if (matchedDay !== undefined) {
-          const key = `reminder_${cartridgeId}_${matchedDay}d_${today()}`;
+        if (matchedThreshold !== undefined) {
+          const slot = testMode ? currentMinuteSlot() : todayStamp();
+          const key = `reminder_${cartridgeId}_${matchedThreshold}${unit}_${slot}`;
           if (!wasNotified(key)) {
             markNotified(key);
             playNotificationChime();
             showBrowserNotification(
               "🔔 Replacement Reminder",
-              `${filterName} › ${cartridgeName} is due in ${daysRemaining} day${daysRemaining !== 1 ? "s" : ""}`,
+              `${filterName} › ${cartridgeName} is due in ${Math.round(valueRemaining)} ${unit}${Math.round(valueRemaining) !== 1 ? "s" : ""}`,
               key
             );
-            break; // One chime per check, next ones fire on next focus/load
+            break;
           }
         }
       }
     }
-  }, [enabled, reminderDays, upcoming]);
+  }, [enabled, reminderThresholds, upcoming, testMode]);
 
-  // Check on mount + whenever data changes
+  // Check on mount + whenever upstream data changes
   useEffect(() => {
     if (upcoming.length === 0) return;
     checkAndNotify();
   }, [checkAndNotify, upcoming]);
 
-  // Re-check when window regains focus (user comes back to the tab)
+  // Re-check on window focus
   useEffect(() => {
-    const onFocus = () => {
-      checkedRef.current = false;
-      checkAndNotify();
-    };
+    const onFocus = () => checkAndNotify();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [checkAndNotify]);
 
-  // Periodic check every 60 minutes while tab is open
+  // Periodic check: every 30 s in test mode, every 60 min normally
   useEffect(() => {
-    const interval = setInterval(checkAndNotify, 60 * 60 * 1000);
+    const ms = testMode ? 30_000 : 60 * 60 * 1000;
+    const interval = setInterval(checkAndNotify, ms);
     return () => clearInterval(interval);
-  }, [checkAndNotify]);
+  }, [checkAndNotify, testMode]);
+}
+
+// ─── Test-mode localStorage helpers (used by Settings) ───────────────────────
+
+const TEST_MODE_KEY = "aquatrack_notif_testmode";
+
+export function getTestMode(): boolean {
+  return localStorage.getItem(TEST_MODE_KEY) === "1";
+}
+
+export function setTestMode(on: boolean) {
+  if (on) {
+    localStorage.setItem(TEST_MODE_KEY, "1");
+  } else {
+    localStorage.removeItem(TEST_MODE_KEY);
+  }
 }
