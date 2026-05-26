@@ -11,10 +11,16 @@ import { useGetSettings, getGetSettingsQueryKey, useUpdateSettings } from "@work
 import { useQueryClient } from "@tanstack/react-query";
 import { guestExportData, guestImportData } from "@/lib/guest-storage";
 import { useToast } from "@/hooks/use-toast";
-import { Settings as SettingsIcon, Sun, Moon, Monitor, Globe, Bell, Download, Upload, LogOut, Shield } from "lucide-react";
+import { Settings as SettingsIcon, Sun, Moon, Monitor, Globe, Bell, Download, Upload, LogOut, Shield, Volume2, BellOff, BellRing } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import {
+  requestNotificationPermission,
+  getNotificationPermission,
+  playNotificationChime,
+  playOverdueAlarm,
+} from "@/hooks/use-notifications";
 
 export default function Settings() {
   const { isAuthenticated, isGuest, user, logout } = useAuth();
@@ -27,6 +33,7 @@ export default function Settings() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderDays, setReminderDays] = useState([7, 10, 20]);
   const [customDay, setCustomDay] = useState("");
+  const [permission, setPermission] = useState<NotificationPermission>(() => getNotificationPermission());
 
   const { data: settings } = useGetSettings({
     query: { enabled: isAuthenticated, queryKey: getGetSettingsQueryKey() }
@@ -194,7 +201,7 @@ export default function Settings() {
           <div className="flex items-center justify-between">
             <div>
               <Label className="font-medium">{t("Enable Reminders", "تفعيل التذكيرات")}</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">{t("Get notified before replacements are due", "تلقَّ إشعارات قبل مواعيد الاستبدال")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("Play sound and show alert before replacements are due", "تشغيل صوت وإظهار تنبيه قبل مواعيد الاستبدال")}</p>
             </div>
             <Switch
               checked={notificationsEnabled}
@@ -204,36 +211,110 @@ export default function Settings() {
           </div>
 
           {notificationsEnabled && (
-            <div>
-              <Label className="text-sm">{t("Remind me before (days)", "تذكيرني قبل (أيام)")}</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {reminderDays.map(day => (
-                  <button
-                    key={day}
-                    onClick={() => removeReminderDay(day)}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
-                    title={t("Click to remove", "انقر للإزالة")}
-                    data-testid={`reminder-day-${day}`}
-                  >
-                    {day}d ×
-                  </button>
-                ))}
+            <>
+              {/* Browser permission banner */}
+              {permission !== "granted" && (
+                <div className={cn(
+                  "flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm",
+                  permission === "denied"
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400"
+                )}>
+                  {permission === "denied" ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <BellOff className="w-4 h-4 shrink-0" />
+                        <span>{t("Notifications blocked by browser. Enable in browser settings.", "الإشعارات محظورة. فعّلها من إعدادات المتصفح.")}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <BellRing className="w-4 h-4 shrink-0" />
+                        <span>{t("Allow notifications to get browser alerts with sound.", "اسمح بالإشعارات للحصول على تنبيهات صوتية.")}</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={async () => {
+                          const p = await requestNotificationPermission();
+                          setPermission(p);
+                          if (p === "granted") playNotificationChime();
+                        }}
+                        data-testid="button-enable-notifications"
+                      >
+                        {t("Allow", "السماح")}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Permission granted — show test buttons */}
+              {permission === "granted" && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <BellRing className="w-3.5 h-3.5 text-emerald-500" />
+                    {t("Browser notifications enabled", "الإشعارات مفعّلة")}
+                  </span>
+                  <div className="ms-auto flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs h-7"
+                      onClick={() => playNotificationChime()}
+                      data-testid="button-test-chime"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      {t("Test reminder", "اختبار التذكير")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs h-7 text-destructive"
+                      onClick={() => playOverdueAlarm()}
+                      data-testid="button-test-alarm"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      {t("Test overdue", "اختبار المتأخر")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Reminder days config */}
+              <div>
+                <Label className="text-sm">{t("Remind me before (days)", "تذكيرني قبل (أيام)")}</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {reminderDays.map(day => (
+                    <button
+                      key={day}
+                      onClick={() => removeReminderDay(day)}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
+                      title={t("Click to remove", "انقر للإزالة")}
+                      data-testid={`reminder-day-${day}`}
+                    >
+                      {day}d ×
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    type="number"
+                    value={customDay}
+                    onChange={e => setCustomDay(e.target.value)}
+                    placeholder={t("Add days...", "أضف أيام...")}
+                    className="h-8 text-sm w-32"
+                    onKeyDown={e => e.key === "Enter" && addReminderDay()}
+                    data-testid="input-custom-reminder-day"
+                  />
+                  <Button size="sm" variant="outline" onClick={addReminderDay} data-testid="button-add-reminder-day">
+                    {t("Add", "إضافة")}
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2 mt-2">
-                <Input
-                  type="number"
-                  value={customDay}
-                  onChange={e => setCustomDay(e.target.value)}
-                  placeholder={t("Add days...", "أضف أيام...")}
-                  className="h-8 text-sm w-32"
-                  onKeyDown={e => e.key === "Enter" && addReminderDay()}
-                  data-testid="input-custom-reminder-day"
-                />
-                <Button size="sm" variant="outline" onClick={addReminderDay} data-testid="button-add-reminder-day">
-                  {t("Add", "إضافة")}
-                </Button>
-              </div>
-            </div>
+            </>
           )}
         </div>
       </Section>
